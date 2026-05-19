@@ -1,0 +1,39 @@
+# ==========================================
+# 🏗️ Jjap-Cursor Project Ignore Rules (Clean)
+# ==========================================
+
+# 1. Python Virtual Environment & Cache
+.venv/
+venv/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# 2. Security & Environment Variables
+.env
+.env.local
+.env.*.local
+
+# 3. Jjap-Cursor Local Artifacts & Cache (인덱스 및 마크다운 지도 완벽 격리)
+.jjap_context.json
+.jjap_symbols.json
+definition_map.json
+CODEBASE_MAP.md
+
+# 4. Phase A 트랜잭션 작동 시 생성될 백업 파일 안전장치
+*.bak
+.backup/
+
+# 5. OS & IDE Metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

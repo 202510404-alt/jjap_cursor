@@ -1,0 +1,53 @@
+📄 [Plan] 프로젝트 짭커서 (Jjap-Cursor)
+
+1. 프로젝트 비전 & 핵심 철학
+Vision: Gemini API 및 AST 분석 기반의 로컬 프로젝트 지능형 에이전트 엔진과 이를 제어하는 Desktop UI 클라이언트.
+
+Philosophy: 
+- "최소 토큰, 최대 맥락": 최적화된 Skeleton과 Heuristic Metadata를 통해 추론 효율을 극대화한다.
+- "Core-First, UI-Second": 모든 의사결정은 엔진(Core)이 담당하며, UI는 Stateless 표현 계층으로 기능한다.
+- "Local-First & Safety": 모든 코드는 로컬 환경에서 관리하며, 사용자 승인(Approval Gate) 없이 실제 파일 시스템을 수정하지 않는다.
+
+2. 시스템 아키텍처 (구현 전략)
+A. 멀티 레이어 컨텍스트 공급 (Tiered Context)
+- Level 1 (Direct): 현재 작업 중인 파일의 전체 코드.
+- Level 2 (Skeleton+): 참조 파일들의 AST Skeleton, 함수 시그니처, symbol_id, call 관계 등 구조적 메타데이터.
+- Level 3 (Global): 프로젝트 디렉토리 구조 요약 및 AI용 브리핑 파일(ai_briefing.md).
+
+B. 지능형 증분 인덱싱 (Merkle-Hash Indexing)
+변경 파일만 해시 체크를 통해 AST 분석 및 스켈레톤 갱신(Lazy Sync).
+
+C. UI-Core 분리 아키텍처 (Thin-Client)
+- Agent Session Bridge: UI 이벤트를 중계하는 Thin-Controller 계층. Core와 IPC/API로 통신한다.
+
+3. 핵심 기능 체크리스트 (Detailed Implementation)
+[ ] Phase 1: 기반 인프라 (Foundation)
+[ ] .env 기반 API Key 관리 및 pathlib 기반 증분 인덱싱 환경 구축.
+
+[ ] Phase 2: 컨텍스트 엔진 (Context Engine)
+[ ] AST Skeleton Extractor & Heuristic Dependency Analyzer 구현.
+
+[ ] Phase 3: 대화 및 메모리 제어 (Brain)
+[ ] Execution Plan (JSON): 구조화 계획(JSON)을 기반으로 수정 순서와 대상 파일을 명시.
+[ ] Token Budgeter: 중요도 기반 컨텍스트 Eviction(제거) 알고리즘 적용.
+
+[ ] Phase 4: 실행 및 안전성 (Action & Stability)
+[ ] Unified Diff Generator: 변경 사항을 적용 전 표준 Diff 형식으로 생성.
+[ ] Atomic Multi-Patch: 'All-or-Nothing' 원칙의 트랜잭션 및 글로벌 롤백 보장.
+[ ] Snapshot Recovery: 트랜잭션 단위 스냅샷 생성 및 성공 시 자동 정리(Cleanup).
+[ ] Explicit Approval Gate: 생성된 Diff에 대한 사용자의 명시적 승인 후 파일 수정 허용.
+
+[ ] Phase 5: 인터페이스 확장 (Multi-UI)
+[ ] Desktop Workspace Picker & Visual Approval (Diff) Panel 구현.
+
+4. 구체적 구현 방식 명세 (Detailed Specs)
+① 적용 안정성 (Global Rollback)
+수정 실패 시 스냅샷을 이용해 전체를 이전 상태로 되돌린다. 스냅샷은 트랜잭션 종료 시 즉시 소멸한다.
+
+② Heuristic 한계 대응
+의존성 분석의 한계를 인정하고, AI는 수정 계획 수립 시 반드시 대상 심볼의 선언부를 재조회하여 검증하도록 강제한다.
+
+5. AI 지시사항 (Cursor/Gemini 전용)
+Rule 1: 모든 수정은 [Plan -> Validate -> Apply] 트랜잭션을 따르며, 사용자 승인 없이 실제 파일을 수정하지 마라.
+Rule 2: 토큰 한도 근접 시 중요도가 낮은 컨텍스트를 스스로 제거하여 맥락을 유지하고, 필요시에만 보고하라.
+Constraint: 생성된 코드는 반드시 Validation Pipeline(AST/Syntax check)을 통과해야 한다.

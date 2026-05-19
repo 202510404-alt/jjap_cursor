@@ -1,0 +1,93 @@
+🏗️ [최종 확정본] 짭커서(Jjap-Cursor) 기술 명세서 (v8.1.1)
+
+
+
+1. 공통 원칙 (Incremental Architecture)
+
+Legacy Preservation: 현재 구현된 ProjectManager, ContextBuilder, GeminiPlanClient, Incremental Indexing 구조와 파일명을 반드시 유지하며, 이를 파괴하는 리팩토링을 금지한다.
+
+
+
+No Over-Engineering: Event-bus, Plugin system, Async Actor 등 대규모 신규 아키텍처 도입을 엄격히 금지하며, 기존 클래스 내부의 점진적 확장을 원칙으로 한다.
+
+
+
+Time-Layering: 모든 기능은 [MVP], [Planned], [Long-Term] 단계를 준수하여 개발 속도를 조절한다.
+
+
+
+2. Phase별 세부 설계도
+
+Phase 1: 오케스트레이터 & 제어부 [MVP]
+
+
+
+Plan-First Executor: AI는 모든 수정 전 구조화된 계획(JSON)을 선제 생성해야 한다.
+
+
+
+Lazy Sync: 질문 시점에 변경된 파일만 즉시 증분 인덱싱하여 최신성을 유지한다.
+
+
+
+Phase 2: 컨텍스트 엔진 [MVP]
+
+
+
+Heuristic Metadata: 심볼 시그니처, call-graph 등 구조적 메타데이터를 제공하되, 이는 완벽한 분석이 아닌 '추정치'임을 전제로 한다.
+
+
+
+Dynamic Budget System: 실시간 토큰 계산을 통해 중요도가 낮은 심볼부터 컨텍스트에서 제거(Eviction)한다.
+
+
+
+Phase 3: 실행 및 패치 엔진 [MVP Focus]
+
+
+
+[MVP] Atomic Multi-Patch: with transaction(): 기반으로 수정 전 대상 전체를 .bak로 백업하고, 하나라도 실패 시 전체 롤백한다.
+
+
+
+[MVP] Temp Workspace Patch: 모든 수정은 임시 작업 공간(Temporary Buffer)에서 수행하며, 검증 완료 전까지 실제 프로젝트 파일을 수정하지 않는다.
+
+
+
+[Planned] AST-Hybrid Patch: (중요) 초기 구현은 line-range 기반 수정을 우선하며, AST node 직접 수정(rewriting)은 장기 목표로 제한한다.
+
+
+
+Phase 4: 피드백 및 안정성 루프 [MVP Focus]
+
+
+
+[MVP] Unified Diff Generator: 변경 사항을 적용 전 표준 Diff 형식으로 생성하여 사용자에게 전달한다.
+
+
+
+[MVP] Explicit Approval Gate: 사용자의 명시적 승인(Y/N) 전까지 패치를 실제 파일 시스템에 Commit 하지 않는다.
+
+
+
+[MVP] Light Validation: 초기 단계의 검증은 ast.parse 및 기초적인 Syntax Check 수준으로 제한하여 성능을 보존한다.
+
+
+
+[Planned] Self-Correction: 검증 실패 시 임시 공간에서 최대 3회 재수정 시도.
+
+
+
+Phase 5: 인터페이스 확장 [Long-Term]
+
+
+
+[Planned] Workspace Picker: 프로젝트 루트 선택 및 보안 로직.
+
+
+
+[Long-Term] Thin Session Bridge: (중요) 초기 UI-Core 연결은 복잡한 IPC/WebSocket 대신 단순 로컬 호출 기반으로 시작한다.
+
+
+
+[Long-Term] Visual Approval Panel: GUI 기반 Diff 시각화 및 승인 인터페이스.
