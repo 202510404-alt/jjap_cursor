@@ -10,11 +10,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..errors import PlanningError
-from ..interfaces.context_builder import ContextBuilder
-from ..interfaces.gemini_client import GeminiClient
-from .text_sanitizer import TextSanitizer
-from .plan_validator import PlanValidator
+from ...errors import PlanningError
+from ...interfaces.context_builder import ContextBuilder
+from ...interfaces.gemini_client import GeminiClient
+from ..text_sanitizer import clean_markdown
+from ..plan_validator import validate_plan_schema
 
 # 🎛️ [절대 규칙] 원터치 디버깅 로그 스위치 장착
 DEBUG_MODE = True
@@ -42,11 +42,11 @@ def create_edit_plan(
             )
             
             # ⚡ [지뢰 해결]: 찢어놓은 청소부 부서(TextSanitizer)로 마크다운 오염물 즉시 도려내기!
-            cleaned_json_str = TextSanitizer.clean_markdown(raw)
+            cleaned_json_str = clean_markdown(raw)
             data = json.loads(cleaned_json_str)
             
             # ⚡ [지뢰 해결]: 찢어놓은 영양사 부서(PlanValidator)로 심층 스키마 현미경 검사!
-            PlanValidator.validate_plan_schema(data)
+            validate_plan_schema(data)
             return data
             
         except (json.JSONDecodeError, ValueError, TypeError, RuntimeError) as exc:

@@ -8,19 +8,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from ..types import EditPlan, PlanStep
-from .path_validator import PathValidator
+from ...types import EditPlan, PlanStep
+from ..path_validator import validate_and_resolve
 
 
 def map_payload_to_edit_plan(data: dict, project_root: Path) -> EditPlan:
     """순수 JSON 기획 장부를 읽어, 안전 검증된 절대 경로가 장착된 EditPlan 객체로 팩킹합니다."""
-    # ⚡ 경로 보안관 경비원 부서 원격 호출
-    validator = PathValidator(project_root=project_root)
-    
     resolved_paths: list[Path] = []
     for rel_path in data["affected_files"]:
         # ⚡ [지뢰 해결]: 매니저 내부 중복 로직 전면 삭제 후, 경비원에게 안전한 절대 경로 정산 위임!
-        resolved_paths.append(validator.validate_and_resolve(str(rel_path).strip()))
+        resolved_paths.append(validate_and_resolve(project_root, str(rel_path).strip()))
 
     steps_out: list[PlanStep] = []
     for idx, step in enumerate(data["steps"]):
