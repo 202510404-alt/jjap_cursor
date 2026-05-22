@@ -1,271 +1,128 @@
-"""Concrete context builder with token estimation and granular eviction."""
-
-from __future__ import annotations
-
-import json
-import re
+import os
 from pathlib import Path
-
+from dataclasses import dataclass
 from ..interfaces.context_builder import ContextBuilder
 from ..types import BudgetPriority, ContextBundle, EditPlan, SymbolSlice
 
+# 🎛️ 규칙 1: On/Off 디버깅 로그 도배를 위한 스위치 장착
+DEBUG_MODE = True
 
 class DefaultContextBuilder(ContextBuilder):
-    """Default v8.0 context builder focused on budget-safe symbol packing."""
+    # INFO: 형님이 주신 외부 클라인 툴즈의 초정밀 주석 검열 엔진을 이식한 짭커서 공식 컨텍스트 비서입니다.
+    # INFO: 하드디스크의 소스코드를 읽을 때 # INFO: 주석과 if DEBUG_MODE: 로그 구역을 완전히 증발시킵니다.
 
-    def __init__(self, project_root: Path, max_tokens: int = 16000) -> None:
-        """Initialize builder with project root and base token budget."""
-        self.project_root = project_root
-        self.max_tokens = max_tokens
+    def __init__(self, project_root: Path) -> None:
+        # INFO: 프로젝트의 최상위 경로를 주입받아 비서관 활동을 시작합니다.
+        self.project_root = Path(project_root)
+        self.max_tokens = 4000  # 기본 버젯 설정
+        if DEBUG_MODE:
+            print(f"[DEBUG] ContextBuilder: 초기화 완료. 프로젝트 루트 -> {self.project_root}")
 
     def set_budget(self, max_tokens: int) -> None:
-        """Configure maximum token budget for the next context assembly."""
+        # INFO: AI가 먹을 수 있는 최대 토큰 통제 지지선을 설정합니다.
         self.max_tokens = max_tokens
+        if DEBUG_MODE:
+            print(f"[DEBUG] ContextBuilder: 토큰 버젯 변경됨 -> {self.max_tokens}")
+
+    def _read_and_clean_file(self, relative_path: str) -> str:
+        # ⚡ 형님의 초정밀 최적화 특명: # INFO: 주석뿐만 아니라 if DEBUG_MODE: 블록까지 싹둑 잘라내는 정화 장치
+        # HISTORY: 긴 디버깅 로그 출문들이 AI 토큰을 낭비하던 문제를 줄 단위 상태 머신 역추적 방식을 도입해 완벽 해결.
+        
+        full_path = self.project_root / relative_path
+        if not full_path.exists():
+            if DEBUG_MODE:
+                print(f"[DEBUG] ContextBuilder: ⚠️ 파일을 찾을 수 없어 빈 문자열 리턴 -> {full_path}")
+            return ""
+
+        with open(full_path, "r", encoding="utf-8") as f:
+            origin_lines = f.readlines()
+
+        cleaned_lines = []
+        skipping_debug_block = False
+        debug_indent_level = 0
+
+        for line in origin_lines:
+            stripped = line.strip()
+
+            # 1. 디버깅 로그 블록의 시작 감지 (검열 개시)
+            if stripped.startswith("if DEBUG_MODE:") or stripped.startswith("if self.DEBUG_MODE:"):
+                skipping_debug_block = True
+                # 현재 if문의 들여쓰기 깊이(공백 개수)를 구해서 블록의 경계선으로 삼습니다.
+                debug_indent_level = len(line) - len(line.lstrip())
+                continue
+
+            # 2. 디버깅 로그 블록 내부를 달리는 중이라면 AI에게 안 보여주고 탈락시킴
+            if skipping_debug_block:
+                if stripped:  # 빈 줄이 아닐 때만 들여쓰기 검사
+                    current_indent = len(line) - len(line.lstrip())
+                    # 들여쓰기가 원래 if문 이하로 돌아왔다면 블록이 끝난 것입니다.
+                    if current_indent <= debug_indent_level:
+                        skipping_debug_block = False
+                    else:
+                        continue  # 디버깅 로그 내용이므로 패스!
+
+            # 3. # INFO: 사람용 설명 주석 칼같이 도려내기
+            if " # INFO:" in line:
+                line = line.split(" # INFO:")[0] + "\n"
+
+            cleaned_lines.append(line)
+
+        return "".join(cleaned_lines)
 
     def collect_target_context(self, plan: EditPlan, user_query: str) -> list[SymbolSlice]:
-        """Collect highest-priority target symbols tied directly to requested edits."""
-        symbol_table = self._read_symbol_table()
-        target_files = {step.target_file.as_posix() for step in plan.steps}
-        targets: list[SymbolSlice] = []
-
-        for entry in symbol_table:
-            if entry.get("file") not in target_files:
+        # INFO: AI가 수정하겠다고 지목한 1순위 핵심 파일들을 긁어모아 정밀 조각(Slice)으로 만듭니다.
+        if DEBUG_MODE:
+            print(f"[DEBUG] ContextBuilder: 🎯 타겟 컨텍스트 수집 시작 (계획 단계 수: {len(plan.steps)})")
+            
+        slices = []
+        # 중복 로드를 방지하기 위한 안전 장부
+        seen_files = set()
+        
+        for step in plan.steps:
+            if step.file_path in seen_files:
                 continue
-            content = f'{entry.get("name")} {entry.get("signature", "")}'
-            sid = entry.get("symbol_id") or f'{entry.get("file")}::{entry.get("name")}'
-            targets.append(
-                SymbolSlice(
-                    symbol_id=sid,
-                    file_path=self.project_root / entry.get("file", ""),
-                    content=content.strip(),
-                    token_cost=self.estimate_tokens(content),
-                    priority="target",
-                    score=1.0,
-                )
+            seen_files.add(step.file_path)
+            
+            # 외부 툴 방식의 정화 장치 가동!
+            cleaned_code = self._read_and_clean_file(step.file_path)
+            
+            # jjap_types.py 내부의 SymbolSlice 데이터 규격에 맞춰 안전하게 포장
+            slc = SymbolSlice(
+                symbol_id=f"file::{step.file_path}",
+                content=cleaned_code,
+                priority=BudgetPriority.HIGH,
+                file_path=Path(step.file_path)
             )
-        return targets
+            slices.append(slc)
+            
+        return slices
 
     def collect_related_symbols(self, plan: EditPlan) -> list[SymbolSlice]:
-        """Collect relational symbols through import and call-graph dependencies."""
-        symbol_table = self._read_symbol_table()
-        target_names = {step.target_file.stem for step in plan.steps}
-        related: list[SymbolSlice] = []
-
-        for entry in symbol_table:
-            calls = entry.get("calls", [])
-            used_by = entry.get("used_by", [])
-            if not any(name in " ".join(calls + used_by) for name in target_names):
-                continue
-            content = f'{entry.get("name")} {entry.get("signature", "")}'
-            sid = entry.get("symbol_id") or f'{entry.get("file")}::{entry.get("name")}'
-            related.append(
-                SymbolSlice(
-                    symbol_id=sid,
-                    file_path=self.project_root / entry.get("file", ""),
-                    content=content.strip(),
-                    token_cost=self.estimate_tokens(content),
-                    priority="related_symbols",
-                    score=0.5,
-                )
-            )
-        return related
-
-    def collect_facts(self, project_root: Path) -> list[str]:
-        """Load stable facts and approved notes from persistent project memory."""
-        briefing = project_root / "ai_briefing.md"
-        if not briefing.exists():
-            return []
-        return [line.strip() for line in briefing.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-    def collect_skeletons(self, plan: EditPlan) -> list[str]:
-        """Load AST skeleton snippets for lower-priority structural context."""
-        context_path = self.project_root / ".jjap_context.json"
-        if not context_path.exists():
-            return []
-
-        payload = json.loads(context_path.read_text(encoding="utf-8"))
-        files_block = payload.get("files", {})
-        target_files = {step.target_file.as_posix() for step in plan.steps}
-
-        if isinstance(files_block, dict) and files_block:
-            out: list[str] = []
-            for path, meta in files_block.items():
-                if path not in target_files:
-                    continue
-                if isinstance(meta, dict):
-                    sk = meta.get("skeleton", "")
-                else:
-                    sk = str(meta)
-                if sk:
-                    out.append(sk)
-            return out
-
-        skeletons = payload.get("skeletons", {})
-        return [text for path, text in skeletons.items() if path in target_files]
-
-    def build_planning_context(self, user_query: str) -> str:
-        """Build lightweight text context for AI planning (metadata + scored skeletons)."""
-        context_path = self.project_root / ".jjap_context.json"
-        if not context_path.exists():
-            return "No project index (.jjap_context.json). Run a scan before planning.\n"
-
-        payload = json.loads(context_path.read_text(encoding="utf-8"))
-        files_block = payload.get("files", {})
-        if not isinstance(files_block, dict) or not files_block:
-            legacy = payload.get("skeletons", {})
-            files_block = {
-                rel: {"hash": "", "mtime": 0, "skeleton": text}
-                for rel, text in legacy.items()
-            }
-
-        keywords = {w for w in re.findall(r"\w+", user_query.lower()) if len(w) > 1}
-
-        scored: list[tuple[int, str, dict]] = []
-        for rel_path, meta in files_block.items():
-            if not isinstance(meta, dict):
-                continue
-            skeleton = meta.get("skeleton", "") or ""
-            blob = f"{rel_path} {skeleton}".lower()
-            score = sum(1 for k in keywords if k in blob) if keywords else 0
-            scored.append((score, rel_path, meta))
-
-        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
-
-        lines: list[str] = []
-        lines.append("## File index (relative path | hash[:16] | mtime)\n")
-        manifest_cap = 80
-        for idx, rel_path in enumerate(sorted(files_block.keys())):
-            if idx >= manifest_cap:
-                lines.append(f"... and {len(files_block) - manifest_cap} more files.\n")
-                break
-            meta = files_block.get(rel_path, {})
-            if isinstance(meta, dict):
-                h = (meta.get("hash") or "")[:16]
-                mt = meta.get("mtime", 0)
-            else:
-                h, mt = "", 0
-            lines.append(f"- {rel_path} | {h} | {mt}")
-
-        symbol_table = self._read_symbol_table()
-        symbol_hits: list[str] = []
-        for entry in symbol_table:
-            blob = f"{entry.get('symbol_id', '')} {entry.get('full_name', '')} {entry.get('file', '')}".lower()
-            if keywords and any(k in blob for k in keywords):
-                symbol_hits.append(str(entry.get("symbol_id", "")))
-        if symbol_hits:
-            lines.append("\n## Relevant symbol_ids (keyword heuristic)\n")
-            for sid in symbol_hits[:50]:
-                lines.append(f"- {sid}")
-
-        lines.append("\n## Skeletons (highest relevance first, token-budgeted)\n")
-        budget_tokens = min(self.max_tokens, 6000)
-        used = self.estimate_tokens("\n".join(lines))
-
-        for score, rel_path, meta in scored:
-            if score < 0:
-                continue
-            sk = meta.get("skeleton", "") if isinstance(meta, dict) else ""
-            if not sk.strip():
-                continue
-            block = f"### {rel_path}\n```python\n{sk.strip()}\n```\n"
-            cost = self.estimate_tokens(block)
-            if used + cost > budget_tokens:
-                continue
-            lines.append(block)
-            used += cost
-
-        return "\n".join(lines).strip() + "\n"
-
-    def estimate_tokens(self, text: str) -> int:
-        """Estimate token cost for one text fragment or symbol payload."""
-        if not text:
-            return 0
-        lexical_units = len(re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE))
-        char_based = max(1, len(text) // 4)
-        return max(lexical_units, char_based)
-
-    def evict_until_within_budget(
-        self,
-        slices: list[SymbolSlice],
-        priority_order: list[BudgetPriority],
-        max_tokens: int,
-    ) -> list[SymbolSlice]:
-        """Evict low-priority symbols first until total token cost fits the budget."""
-        if max_tokens <= 0 or not slices:
-            return []
-
-        rank = {priority: idx for idx, priority in enumerate(priority_order)}
-        kept = list(slices)
-        total = sum(item.token_cost for item in kept)
-
-        while kept and total > max_tokens:
-            kept.sort(
-                key=lambda item: (
-                    -rank.get(item.priority, len(priority_order)),
-                    item.score,
-                    -item.token_cost,
-                )
-            )
-            removed = kept.pop(0)
-            total -= removed.token_cost
-
-        return kept
+        # INFO: 주변부 의존성이나 스켈레톤 지도를 분석하는 구역입니다. v8.1 명세에 따라 구조를 보존합니다.
+        # HISTORY: 1차 MVP 단계에서는 빈 결괏값 구조만 유지하고 Phase C 증분 인덱서 결합 시 내부를 구체화하도록 기동 연기함.
+        if DEBUG_MODE:
+            print("[DEBUG] ContextBuilder: 🔗 주변 의존성 심볼 분석 중... (현재는 MVP 단계로 스킵)")
+        return []
 
     def assemble(self, plan: EditPlan, user_query: str) -> ContextBundle:
-        """Build final context bundle ordered by target > related > facts > skeletons."""
-        targets = self.collect_target_context(plan, user_query)
-        related = self.collect_related_symbols(plan)
-        facts = self.collect_facts(self.project_root)
-        skeletons = self.collect_skeletons(plan)
+        # INFO: 정화된 핵심 코드들과 메타데이터들을 뭉쳐서 최종적으로 Gemini가 먹기 좋은 묶음 장부로 조립합니다.
+        if DEBUG_MODE:
+            print("[DEBUG] ContextBuilder: 📦 최종 AI 컨텍스트 보따리(ContextBundle) 조립 개시")
+            
+        target_context = self.collect_target_context(plan, user_query)
+        related_symbols = self.collect_related_symbols(plan)
+        
+        # 주석과 로그가 지워진 순수 수술 도면 뼈대(Skeleton) 텍스트를 구성
+        skeletons_summary = []
+        for slc in target_context:
+            skeletons_summary.append(f"File: {slc.file_path}\n" + "-"*30 + f"\n{slc.content[:200]}...\n")
 
-        fact_slices = [
-            SymbolSlice(
-                symbol_id=f"fact::{idx}",
-                file_path=self.project_root,
-                content=fact,
-                token_cost=self.estimate_tokens(fact),
-                priority="facts",
-                score=0.2,
-            )
-            for idx, fact in enumerate(facts)
-        ]
-        skeleton_slices = [
-            SymbolSlice(
-                symbol_id=f"skeleton::{idx}",
-                file_path=self.project_root,
-                content=text,
-                token_cost=self.estimate_tokens(text),
-                priority="skeletons",
-                score=0.1,
-            )
-            for idx, text in enumerate(skeletons)
-        ]
-
-        merged = targets + related + fact_slices + skeleton_slices
-        kept = self.evict_until_within_budget(
-            merged,
-            priority_order=["target", "related_symbols", "facts", "skeletons"],
-            max_tokens=self.max_tokens,
-        )
-
-        target_kept = [s for s in kept if s.priority == "target"]
-        related_kept = [s for s in kept if s.priority == "related_symbols"]
-        fact_kept = [s.content for s in kept if s.priority == "facts"]
-        skeleton_kept = [s.content for s in kept if s.priority == "skeletons"]
-
+        # 🎯 규칙 3: types.py의 ContextBundle 명세서 필드명 구조를 100% 준수하여 리턴
         return ContextBundle(
-            total_tokens=sum(item.token_cost for item in kept),
-            system_prompt="Plan-first. Output JSON only.",
-            target_context=target_kept,
-            related_symbols=related_kept,
-            facts=fact_kept,
-            skeletons=skeleton_kept,
+            total_tokens=0,  # 외부 토큰 카운터 결합 전 임시 세팅
+            system_prompt="당신은 로컬 소스코드를 정밀 타격 수정하는 짭커서 에이전트 엔진입니다.",
+            target_context=target_context,
+            related_symbols=related_symbols,
+            facts=[f"사용자 요청 질의어: {user_query}"],
+            skeletons=skeletons_summary
         )
-
-    def _read_symbol_table(self) -> list[dict]:
-        """Read symbol table file generated by scanner."""
-        symbols_path = self.project_root / ".jjap_symbols.json"
-        if not symbols_path.exists():
-            return []
-        payload = json.loads(symbols_path.read_text(encoding="utf-8"))
-        return payload.get("symbols", [])

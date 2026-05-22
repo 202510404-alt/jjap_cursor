@@ -127,15 +127,19 @@ class AdvancedIndexerV2:
             print(f"⚠️ [INDEX ERROR] {file_path.name} 스캔 실패: {e}")
 
     def scan_project(self):
-        """전체 프로젝트 폴더를 순회하며 파이썬 파일 인덱싱"""
+        """전체 프로젝트 폴더를 순회하며 파이썬 파일 인덱싱 (start.py 검열 완료)"""
         for root, dirs, files in os.walk(self.project_root):
-            # 가상환경 및 캐시 폴더 무시
+            # 1. 특정 제외 폴더가 경로에 포함되어 있으면 통째로 무시
             if any(p in root for p in [".venv", ".git", "__pycache__", "cline_tools"]):
                 continue
+                
             for file in files:
+                # 🚨 형님의 특명: 단순 실행용 스위치인 start.py는 인덱싱 장부에서 철저히 제외!
+                if file == "start.py":
+                    continue
+                    
                 if file.endswith(".py"):
                     self.index_file(Path(root) / file)
-
         # 의존성 관계 역추적 (used_by 채우기 무의식적 기법)
         for s in self.symbols:
             name_to_check = s["name"]
